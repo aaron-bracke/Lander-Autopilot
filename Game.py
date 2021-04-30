@@ -18,7 +18,9 @@ class Lander:
             "condition": "flying"
             }
 
-        if player_controlled:
+        self.player_controlled = player_controlled
+
+        if self.player_controlled:
             self.Update = self.PlayerUpdate
         else:
             self.Update = self.AIUpdate
@@ -249,10 +251,9 @@ running = True
 lander_list = []
 for i in range(4):
     lander_list.append(Lander(False))
-lander_list.append(Lander(True))
+# lander_list.append(Lander(True))
 
 while running:
-
     pg.event.pump()
     keys = pg.key.get_pressed()
 
@@ -264,8 +265,8 @@ while running:
         if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
             lander.Update(pg.time.get_ticks()/1000 - last_time)
         lander.DrawLander()
-    
-    lander_list[-1].DrawText()
+        if lander.player_controlled:
+            lander.DrawText()
 
     last_time = pg.time.get_ticks()/1000
 
