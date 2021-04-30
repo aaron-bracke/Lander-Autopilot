@@ -17,6 +17,7 @@ class Lander:
             "altitude": 0.0,
             "condition": "flying"
             }
+        self.parameters['altitude'] = (self.parameters['y'] - ground_height - 32) / 10.0
 
         self.player_controlled = player_controlled
 
@@ -237,6 +238,8 @@ engine_med_image = pg.image.load(r'Assets\lander-engine_med.png')
 engine_high_image = pg.image.load(r'Assets\lander-engine_high.png')
 
 # Parameters
+random.seed(10)  # Temportary
+
 has_landed = False
 has_crashed = False
 landing_target = random.uniform(width_screen_pixels/5, 4*width_screen_pixels/5)
