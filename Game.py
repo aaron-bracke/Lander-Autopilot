@@ -2,25 +2,29 @@ import pygame as pg
 import time
 from math import sin, cos, radians, sqrt
 import random
+import numpy as np
+from NeuralNetwork import NeuralNetwork
 
 class Lander:
     def __init__(self, player_controlled):
+        self.neural_network = NeuralNetwork()
+
         self.parameters = {
             "thrust_level": 0.0,
-            "pitch_angle": 0.0,
+            "pitch_angle": random.uniform(-10.0, 10.0),
             "x": random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0),
-            "y": random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0),
-            "vx": random.uniform(-10.0, 10.0),
-            "vy": random.uniform(-60.0, -20.0),
+            "altitude": 0.0,
+            "y": 500.0, #random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0),
+            "vx": 0.0, #random.uniform(-10.0, 10.0),
+            "vy": -30.0, #random.uniform(-60.0, -20.0),
             "mass": total_mass,
             "fuel": total_fuel,
-            "altitude": 0.0,
-            "condition": "flying"
+            "condition": "flying",
+            "cost": 10000.0
             }
         self.parameters['altitude'] = (self.parameters['y'] - ground_height - 32) / 10.0
 
         self.player_controlled = player_controlled
-
         if self.player_controlled:
             self.Update = self.PlayerUpdate
         else:
@@ -75,15 +79,19 @@ class Lander:
 
     def AIUpdate(self, dt):
         """Retrieve AI input and update physics"""
+        # Retrieve input from neural network
+        AI_input = self.neural_network.Predict(np.array([[self.parameters['thrust_level']], [self.parameters['pitch_angle']], \
+            [self.parameters['x']], [self.parameters['altitude']], [self.parameters['vx']], [self.parameters['vy']], [self.parameters['fuel']]]))
+        
         # Input
-        if random.choice([0, 1]):
+        if AI_input[0]:
             self.parameters['thrust_level'] = min(100, self.parameters['thrust_level'] + throttle_step)
-        if random.choice([0, 1]):
+        if AI_input[1]:
             self.parameters['thrust_level'] = max(0, self.parameters['thrust_level'] - throttle_step)
-        if random.choice([0, 1]):
+        if AI_input[2]:
             self.parameters['pitch_angle'] += pitch_step
             if self.parameters['pitch_angle'] > 180.0: self.parameters['pitch_angle'] -= 360
-        if random.choice([0, 1]):
+        if AI_input[3]:
             self.parameters['pitch_angle'] -= pitch_step
             if self.parameters['pitch_angle'] < -180.0: self.parameters['pitch_angle'] += 360
 
@@ -110,7 +118,9 @@ class Lander:
         self.parameters['altitude'] = (self.parameters['y'] - ground_height - 32) / 10.0
 
         # When the lander touches the ground
-        if self.parameters['altitude'] <= 0.0:  
+        if self.parameters['altitude'] <= 0.0:
+            self.parameters['cost'] = sqrt(self.parameters['vx']**2 + self.parameters['vy']**2)
+
             if abs(self.parameters['pitch_angle']) < 10.0 and sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) < 15.0:
                 self.parameters['condition'] = "has_landed"
             else:
@@ -200,6 +210,9 @@ class Lander:
         new_rect = rotated_image.get_rect(center = lander_image.get_rect(topleft = (self.parameters['x'] - 15, height_screen_pixels - self.parameters['y'])).center)
         screen.blit(rotated_image, new_rect.topleft)
 
+    def DetermineCost(self):
+        return self.parameters['cost']
+
 def DrawBackground():
     """Draw the background"""
     screen.fill(background_colour)
@@ -226,58 +239,71 @@ background_colour = (57, 70, 72)
 ground_colour = (211, 212, 217)
 target_colour = (199, 62, 29)
 
-# Start PyGame
-pg.init()
-reso = (int(width_screen_pixels), int(height_screen_pixels))
-screen = pg.display.set_mode(reso, pg.NOFRAME)
-pg.display.set_caption('Lunar Lander')
-window_icon = pg.image.load(r'Assets\lander-engine_high.png')
-pg.display.set_icon(window_icon)
-engine_off_image = pg.image.load(r'Assets\lander-engine_off.png')
-engine_med_image = pg.image.load(r'Assets\lander-engine_med.png')
-engine_high_image = pg.image.load(r'Assets\lander-engine_high.png')
-
 # Parameters
-random.seed(10)  # Temportary
+#random.seed(10)  # Temporary
+landers_per_gen = 20
 
-has_landed = False
-has_crashed = False
 landing_target = random.uniform(width_screen_pixels/5, 4*width_screen_pixels/5)
 target_range = 70
 total_fuel = 250.0
 total_mass = 600.0
 
-# Main game loop
-last_time = 0.0
-running = True
+all_time_best = 15.5
 
-lander_list = []
-for i in range(4):
-    lander_list.append(Lander(False))
-# lander_list.append(Lander(True))
+for i in range(30):
+    # Start PyGame
+    pg.init()
+    reso = (int(width_screen_pixels), int(height_screen_pixels))
+    screen = pg.display.set_mode(reso, pg.NOFRAME)
+    pg.display.set_caption('Lunar Lander')
+    window_icon = pg.image.load(r'Assets\lander-engine_high.png')
+    pg.display.set_icon(window_icon)
+    engine_off_image = pg.image.load(r'Assets\lander-engine_off.png')
+    engine_med_image = pg.image.load(r'Assets\lander-engine_med.png')
+    engine_high_image = pg.image.load(r'Assets\lander-engine_high.png')
 
-while running:
-    pg.event.pump()
-    keys = pg.key.get_pressed()
+    # Main game loop
+    last_time = 0.0
+    start_time = 0.0
+    running = True
 
-    DrawBackground()
-    DrawGround()
-    DrawTarget()
+    lander_list = []
+    for i in range(landers_per_gen):
+        lander_list.append(Lander(False))
+    # lander_list.append(Lander(True))
 
-    for lander in lander_list:
-        if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
-            lander.Update(pg.time.get_ticks()/1000 - last_time)
-        lander.DrawLander()
-        if lander.player_controlled:
-            lander.DrawText()
+    while running:
+        pg.event.pump()
+        keys = pg.key.get_pressed()
 
-    last_time = pg.time.get_ticks()/1000
+        DrawBackground()
+        DrawGround()
+        DrawTarget()
 
-    if keys[pg.K_ESCAPE]:                       # QUIT the game
-        running = False
+        still_flying = False
+        for lander in lander_list:
+            if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
+                still_flying = True
+                lander.Update(pg.time.get_ticks()/1000 - last_time)
+            lander.DrawLander()
+            if lander.player_controlled:
+                lander.DrawText()
 
-    pg.display.flip()                           # Update the screen
+        if not still_flying or pg.time.get_ticks()/1000 > 20.0:
+            running = False
+            lander_list.sort(key=Lander.DetermineCost)
+            if lander_list[0].DetermineCost() < all_time_best:
+                NeuralNetwork.SaveNeuralNetwork(lander_list[0].neural_network.parameters)
+                all_time_best = lander_list[0].DetermineCost()
+            print(lander_list[0].DetermineCost())
 
-    time.sleep(0.02)
+        last_time = pg.time.get_ticks()/1000
 
-pg.quit()
+        if keys[pg.K_ESCAPE]:                       # QUIT the game
+            running = False
+
+        pg.display.flip()                           # Update the screen
+
+        time.sleep(0.02)
+
+    pg.quit()
