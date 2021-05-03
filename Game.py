@@ -7,12 +7,12 @@ from NeuralNetwork import NeuralNetwork
 
 class Lander:
     def __init__(self, player_controlled):
-        self.neural_network = NeuralNetwork()
+        self.neural_network = NeuralNetwork(learning_step)
 
         self.parameters = {
             "thrust_level": 0.0,
-            "pitch_angle": random.uniform(-10.0, 10.0),
-            "x": random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0),
+            "pitch_angle": 0.0, #random.uniform(-10.0, 10.0),
+            "x": 900.0, #random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0),
             "altitude": 0.0,
             "y": 500.0, #random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0),
             "vx": 0.0, #random.uniform(-10.0, 10.0),
@@ -81,7 +81,8 @@ class Lander:
         """Retrieve AI input and update physics"""
         # Retrieve input from neural network
         AI_input = self.neural_network.Predict(np.array([[self.parameters['thrust_level']], [self.parameters['pitch_angle']], \
-            [self.parameters['x']], [self.parameters['altitude']], [self.parameters['vx']], [self.parameters['vy']], [self.parameters['fuel']]]))
+            [self.parameters['x']], [self.parameters['altitude']], [self.parameters['vx']], [self.parameters['vy']], \
+            [self.parameters['fuel']], [landing_target]]))
         
         # Input
         if AI_input[0]:
@@ -119,7 +120,10 @@ class Lander:
 
         # When the lander touches the ground
         if self.parameters['altitude'] <= 0.0:
-            self.parameters['cost'] = sqrt(self.parameters['vx']**2 + self.parameters['vy']**2)
+            self.parameters['cost'] = sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) + \
+                                      abs(self.parameters['pitch_angle']) + \
+                                      abs(self.parameters['x'] - landing_target) / 3 + \
+                                      2*((total_fuel) - self.parameters['fuel'])
 
             if abs(self.parameters['pitch_angle']) < 10.0 and sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) < 15.0:
                 self.parameters['condition'] = "has_landed"
@@ -225,32 +229,42 @@ def DrawTarget():
     """Draw the target landing zone"""
     screen.fill(target_colour, rect=((landing_target - target_range/2, height_screen_pixels - ground_height), (target_range, ground_height / 4)))
 
+def WriteToFile(content):
+    with open("all-time-best.txt", 'w') as f:
+        f.write(str(content))
+
+def ReadFromFile():
+    with open("all-time-best.txt", 'r') as f:
+        content = float(f.read())
+    return content
+
+def CreateLandingTarget():
+    return random.uniform(width_screen_pixels/5, 4*width_screen_pixels/5)
+
 # Constants
 width_screen_pixels = 1080
 height_screen_pixels = 600
+target_range = 70
 
 gravity = 10
 ground_height = 100
 throttle_step = 2
 thrust_power = 150
 pitch_step = 1
+total_fuel = 250.0
+total_mass = 600.0
 
 background_colour = (57, 70, 72)
 ground_colour = (211, 212, 217)
 target_colour = (199, 62, 29)
 
-# Parameters
-#random.seed(10)  # Temporary
+########## Training parameters ##########
 landers_per_gen = 20
+num_of_gens = 20
+learning_step = 0.5
+time_before_skip = 15.0
 
-landing_target = random.uniform(width_screen_pixels/5, 4*width_screen_pixels/5)
-target_range = 70
-total_fuel = 250.0
-total_mass = 600.0
-
-all_time_best = 15.5
-
-for i in range(30):
+for i in range(num_of_gens):
     # Start PyGame
     pg.init()
     reso = (int(width_screen_pixels), int(height_screen_pixels))
@@ -261,6 +275,7 @@ for i in range(30):
     engine_off_image = pg.image.load(r'Assets\lander-engine_off.png')
     engine_med_image = pg.image.load(r'Assets\lander-engine_med.png')
     engine_high_image = pg.image.load(r'Assets\lander-engine_high.png')
+    landing_target = CreateLandingTarget()
 
     # Main game loop
     last_time = 0.0
@@ -270,7 +285,7 @@ for i in range(30):
     lander_list = []
     for i in range(landers_per_gen):
         lander_list.append(Lander(False))
-    # lander_list.append(Lander(True))
+    #lander_list.append(Lander(True))
 
     while running:
         pg.event.pump()
@@ -289,12 +304,11 @@ for i in range(30):
             if lander.player_controlled:
                 lander.DrawText()
 
-        if not still_flying or pg.time.get_ticks()/1000 > 20.0:
+        # End of this generation
+        if not still_flying or pg.time.get_ticks()/1000 > time_before_skip:
             running = False
             lander_list.sort(key=Lander.DetermineCost)
-            if lander_list[0].DetermineCost() < all_time_best:
-                NeuralNetwork.SaveNeuralNetwork(lander_list[0].neural_network.parameters)
-                all_time_best = lander_list[0].DetermineCost()
+            NeuralNetwork.SaveNeuralNetwork(np.average([lander_list[i].neural_network.parameters for i in range(int(landers_per_gen/5))], axis=0)/int(landers_per_gen/5))
             print(lander_list[0].DetermineCost())
 
         last_time = pg.time.get_ticks()/1000
