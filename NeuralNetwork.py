@@ -1,4 +1,5 @@
 import os
+import copy
 from pathlib import Path
 import numpy as np
 from random import shuffle, getrandbits, randrange
@@ -15,8 +16,6 @@ class NeuralNetwork:
             self.parameters = NeuralNetwork.CombineGenes(parent1, parent2)
         else:
             self.parameters = NeuralNetwork.GenerateRandomNetwork()
-
-        # print(self.parameters[3], self.parameters.size)
 
     def Predict(self, a0):
         """Predict the result of a single sample and set the layer values"""
@@ -60,17 +59,30 @@ class NeuralNetwork:
 
     @staticmethod
     def CombineGenes(network1, network2):
-        parameters1 = network1.parameters
-        parameters2 = network2.parameters
+        parameters1 = copy.deepcopy(network1.parameters)
+        parameters2 = copy.deepcopy(network2.parameters)
 
-        parameters = np.copy(parameters1)
-        for i in range(parameters.size):
-            for j in range(parameters[i].shape[0]):
-                for k in range(parameters[i].shape[1]):
+        parameters = copy.deepcopy(parameters1)
+
+        for i in range(parameters1.size):
+            for j in range(parameters1[i].shape[0]):
+                for k in range(parameters1[i].shape[1]):
                     if bool(getrandbits(1)):
-                        parameters[i][j, k] = parameters2[i][j, k]
-                    if randrange(100) < 5:
-                        parameters[i][j, k] = np.random.standard_normal()
+                        parameters[i][j][k] = parameters1[i][j][k]
+                    else:
+                        parameters[i][j][k] = parameters2[i][j][k]
+
+                    if randrange(100) <= 10:
+                        parameters[i][j, k] += np.random.uniform(-3.0, 3.0)
+
+                    # if parameters[i][j][k] != parameters1[i][j][k] and parameters[i][j][k] != parameters2[i][j][k]:
+                    #     print("MUTATION")
+                    # elif parameters[i][j][k] == parameters1[i][j][k] and parameters[i][j][k] != parameters2[i][j][k]:
+                    #     print("PARENT 1")
+                    # elif parameters[i][j][k] == parameters2[i][j][k] and parameters[i][j][k] != parameters1[i][j][k]:
+                    #     print("PARENT 2")
+                    # else:
+                    #     print("INVALID")
 
         return parameters
 

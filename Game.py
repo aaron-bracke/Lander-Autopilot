@@ -19,12 +19,12 @@ class Lander:
     def SetInitialConditions(self):
         self.parameters = {
             "thrust_level": 0.0,
-            "pitch_angle": random.uniform(-10.0, 10.0),
-            "x": random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0),
+            "pitch_angle": 0, #random.uniform(-10.0, 10.0),
+            "x": width_screen_pixels/2, #random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0),
             "altitude": 0.0,
-            "y": random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0),
-            "vx": random.uniform(-10.0, 10.0),
-            "vy": random.uniform(-60.0, -20.0),
+            "y": height_screen_pixels + 100.0, #random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0),
+            "vx": 0, #random.uniform(-10.0, 10.0),
+            "vy": -30.0, #random.uniform(-60.0, -20.0),
             "mass": total_mass,
             "fuel": total_fuel,
             "condition": "flying",
@@ -124,8 +124,9 @@ class Lander:
         if self.parameters['altitude'] <= 0.0:
             self.parameters['cost'] = sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) + \
                                       abs(self.parameters['pitch_angle']) + \
-                                      abs(self.parameters['x'] - landing_target) / 3 + \
-                                      2*((total_fuel) - self.parameters['fuel'])
+                                      abs(self.parameters['x'] - landing_target) / 3
+                                      #   ((total_fuel) - self.parameters['fuel']) + \
+                                      
 
             if abs(self.parameters['pitch_angle']) < 10.0 and sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) < 20.0:
                 self.parameters['condition'] = "has_landed"
@@ -243,17 +244,18 @@ def ReadFromFile():
 def CreateLandingTarget():
     return random.uniform(width_screen_pixels/5, 4*width_screen_pixels/5)
 
-def TrainController(landers_per_gen=40, num_of_gens = 100, time_before_skip = 25.0):
-    dt = 0.02
+def TrainController(landers_per_gen=100, num_of_gens=5000, time_before_skip=25.0):
+    dt = 0.05
 
     lander_list = []
+    lander_list.append(Lander(False, True))
     for j in range(int(landers_per_gen/4)):
-            lander_list.append(Lander(False, True))
+            lander_list.append(Lander(False, False))
 
     for i in range(num_of_gens):
         landing_target = CreateLandingTarget()
         for j in range(int(3*landers_per_gen/4)):
-            lander_list.append(Lander(False, False, np.random.choice(lander_list[:int(landers_per_gen/4)]).neural_network, np.random.choice(lander_list[:int(landers_per_gen/4)]).neural_network)) 
+            lander_list.append(Lander(False, False, np.random.choice(lander_list[:6]).neural_network, np.random.choice(lander_list[:6]).neural_network)) 
 
         # Main game loop
         t = 0
@@ -270,14 +272,14 @@ def TrainController(landers_per_gen=40, num_of_gens = 100, time_before_skip = 25
             if not still_flying or t > time_before_skip:
                 running = False
                 lander_list.sort(key=Lander.DetermineCost)
-                print(lander_list[0].DetermineCost())
+                print(f"{lander_list[0].DetermineCost():0.01f}")
                 lander_list = lander_list[:int(landers_per_gen/4)]
                 for lander in lander_list:
                     lander.SetInitialConditions()
 
     NeuralNetwork.SaveNeuralNetwork(lander_list[0].neural_network.parameters)
 
-def PlayGame(display_ai=False):
+def PlayGame(display_ai=False, display_player=True):
     # Start PyGame
     pg.init()
     reso = (int(width_screen_pixels), int(height_screen_pixels))
@@ -295,7 +297,8 @@ def PlayGame(display_ai=False):
     running = True
 
     landing_target = CreateLandingTarget()
-    player_lander = Lander(True)
+    if display_player:
+        player_lander = Lander(True)
     if display_ai:
         ai_lander = Lander(False, True)
 
@@ -314,10 +317,11 @@ def PlayGame(display_ai=False):
                 ai_lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
             ai_lander.DrawLander(screen, sprite_list)
 
-        if not (player_lander.parameters['condition'] == "has_landed" or player_lander.parameters['condition'] == "has_crashed"):
-            player_lander.Update(pg.time.get_ticks()/1000 - last_time, keys)
-        player_lander.DrawLander(screen, sprite_list)
-        player_lander.DrawText(screen, landing_target)
+        if display_player:
+            if not (player_lander.parameters['condition'] == "has_landed" or player_lander.parameters['condition'] == "has_crashed"):
+                player_lander.Update(pg.time.get_ticks()/1000 - last_time, keys)
+            player_lander.DrawLander(screen, sprite_list)
+            player_lander.DrawText(screen, landing_target)
 
         last_time = pg.time.get_ticks()/1000
         pg.display.update()                           # Update the screen
@@ -342,5 +346,6 @@ background_colour = (57, 70, 72)
 ground_colour = (211, 212, 217)
 target_colour = (199, 62, 29)
 
-# PlayGame(True)
-TrainController()
+for i in range(5):
+    PlayGame(True, False)
+# TrainController()
