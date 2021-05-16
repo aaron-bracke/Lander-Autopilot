@@ -7,8 +7,6 @@ from random import shuffle, getrandbits, randrange
 class NeuralNetwork:
     """Create an instance of the neural network"""
     def __init__(self, read_trained, parent1=None, parent2=None):
-        # self.parameters = NeuralNetwork.GenerateRandomNetwork()
-        # NeuralNetwork.SaveNeuralNetwork(self.parameters)
 
         if read_trained:
             self.parameters = NeuralNetwork.ReadNeuralNetwork()
@@ -20,15 +18,15 @@ class NeuralNetwork:
     def Predict(self, a0):
         """Predict the result of a single sample and set the layer values"""
         z1 = np.matmul(self.parameters[0], a0) + self.parameters[3]
-        a1 = self.Activation(z1)    # First hidden layer
+        a1 = self.HypTan(z1)    # First hidden layer
 
         z2 = np.matmul(self.parameters[1], a1) + self.parameters[4]
-        a2 = self.Activation(z2)  # Second hidden layer
+        a2 = self.HypTan(z2)  # Second hidden layer
 
         z3 = np.matmul(self.parameters[2], a2) + self.parameters[5]
-        a3 = self.Activation(z3)  # Second hidden layer
-        
-        return np.around(a3)    
+        a3 = self.Gaussian(z3)  # Second hidden layer
+
+        return np.around(a3.flatten())
 
     @staticmethod
     def SaveNeuralNetwork(parameters):
@@ -43,7 +41,7 @@ class NeuralNetwork:
 
     @staticmethod
     def GenerateRandomNetwork():
-        layer_sizes        = [9, 10, 10, 4]
+        layer_sizes        = [9, 8, 8, 4]
         weight_shapes      = [(a, b) for a, b in zip(layer_sizes[1:], layer_sizes[:-1])]
 
         weights            = np.array([np.random.standard_normal(weight_shape)/(weight_shape[1]**.5) for weight_shape in weight_shapes], dtype=object)
@@ -53,9 +51,19 @@ class NeuralNetwork:
         return parameters
 
     @staticmethod
-    def Activation(x):
+    def Sigmoid(x):
         """Sigmoid activation function"""
         return 1/(1 + np.exp(-x))
+
+    @staticmethod
+    def HypTan(x):
+        """Hyperbolic tangent activation function"""
+        return (np.exp(x) - np.exp(-x))/(np.exp(x) + np.exp(-x))
+
+    @staticmethod
+    def Gaussian(x):
+        """Gaussian activation function"""
+        return np.exp(-(x**2)/2.0)
 
     @staticmethod
     def CombineGenes(network1, network2):
@@ -71,9 +79,8 @@ class NeuralNetwork:
                         parameters[i][j][k] = parameters1[i][j][k]
                     else:
                         parameters[i][j][k] = parameters2[i][j][k]
-
-                    if randrange(100) <= 10:
-                        parameters[i][j, k] += np.random.uniform(-3.0, 3.0)
+                    if randrange(100) < 4:
+                        parameters[i][j][k] += np.random.standard_normal()/2.0
 
                     # if parameters[i][j][k] != parameters1[i][j][k] and parameters[i][j][k] != parameters2[i][j][k]:
                     #     print("MUTATION")
@@ -86,6 +93,10 @@ class NeuralNetwork:
 
         return parameters
 
+    def ResetNetwork(self):
+        self.parameters = NeuralNetwork.GenerateRandomNetwork()
+        NeuralNetwork.SaveNeuralNetwork(self.parameters)
 
 # network = NeuralNetwork(True)
+# network.ResetNetwork()
 # print(network.Predict([[5], [5], [5], [5], [5], [5], [5], [5], [5]]))

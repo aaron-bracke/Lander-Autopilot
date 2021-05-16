@@ -15,6 +15,7 @@ class Lander:
             self.neural_network = NeuralNetwork(read_only, parent1, parent2)
 
         self.SetInitialConditions()
+        self.total_cost = 1.0
 
     def SetInitialConditions(self):
         self.parameters = {
@@ -28,7 +29,7 @@ class Lander:
             "mass": total_mass,
             "fuel": total_fuel,
             "condition": "flying",
-            "cost": 10000.0
+            "cost": 5000.0
             }
         self.parameters['altitude'] = (self.parameters['y'] - ground_height - 32) / 10.0
 
@@ -83,8 +84,8 @@ class Lander:
         """Retrieve AI input and update physics"""
         # Retrieve input from neural network
         AI_input = self.neural_network.Predict(np.array([[self.parameters['thrust_level']/100], [sin(radians(self.parameters['pitch_angle']))], \
-            [cos(radians(self.parameters['pitch_angle']))], [self.parameters['x']], [self.parameters['altitude']], [self.parameters['vx']], \
-            [self.parameters['vy']], [self.parameters['fuel']], [landing_target]]))
+            [cos(radians(self.parameters['pitch_angle']))], [self.parameters['x']/width_screen_pixels], [self.parameters['y']/height_screen_pixels], [self.parameters['vx']/20.0], \
+            [self.parameters['vy']/20.0], [self.parameters['fuel']/250], [landing_target/width_screen_pixels]]))
         
         # Input
         if AI_input[0]:
@@ -122,10 +123,8 @@ class Lander:
 
         # When the lander touches the ground
         if self.parameters['altitude'] <= 0.0:
-            self.parameters['cost'] = sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) + \
-                                      abs(self.parameters['pitch_angle']) + \
-                                      abs(self.parameters['x'] - landing_target) / 3
-                                      #   ((total_fuel) - self.parameters['fuel']) + \
+            self.parameters['cost'] = abs(self.parameters['x'] - landing_target) + sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) + \
+                                      abs(self.parameters['pitch_angle']) + ((total_fuel) - self.parameters['fuel'])
                                       
 
             if abs(self.parameters['pitch_angle']) < 10.0 and sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) < 20.0:
@@ -217,8 +216,8 @@ class Lander:
         new_rect = rotated_image.get_rect(center = lander_image.get_rect(topleft = (self.parameters['x'] - 15, height_screen_pixels - self.parameters['y'])).center)
         display_surface.blit(rotated_image, new_rect.topleft)
 
-    def DetermineCost(self):
-        return self.parameters['cost']
+    def DetermineTotalCost(self):
+        return self.total_cost
 
 def DrawBackground(display_surface):
     """Draw the background"""
@@ -244,38 +243,44 @@ def ReadFromFile():
 def CreateLandingTarget():
     return random.uniform(width_screen_pixels/5, 4*width_screen_pixels/5)
 
-def TrainController(landers_per_gen=100, num_of_gens=5000, time_before_skip=25.0):
+def TrainController(landers_per_gen=250, num_of_gens=1000, time_before_skip=25.0):
     dt = 0.05
 
-    lander_list = []
-    lander_list.append(Lander(False, True))
-    for j in range(int(landers_per_gen/4)):
-            lander_list.append(Lander(False, False))
+    old_lander_list = []
+    for _ in range(landers_per_gen):
+            old_lander_list.append(Lander(False, False))
 
-    for i in range(num_of_gens):
+    for _ in range(num_of_gens):
+        lander_list = []
         landing_target = CreateLandingTarget()
-        for j in range(int(3*landers_per_gen/4)):
-            lander_list.append(Lander(False, False, np.random.choice(lander_list[:6]).neural_network, np.random.choice(lander_list[:6]).neural_network)) 
+        for j in range(landers_per_gen):
+            lander_list.append(Lander(False, False, np.random.choice(old_lander_list, p=np.array([1/lander.DetermineTotalCost() for lander in old_lander_list])/sum(1/lander.DetermineTotalCost() for lander in old_lander_list)).neural_network, \
+                                                    np.random.choice(old_lander_list, p=np.array([1/lander.DetermineTotalCost() for lander in old_lander_list])/sum(1/lander.DetermineTotalCost() for lander in old_lander_list)).neural_network)) 
+        for lander in lander_list:
+            lander.SetInitialConditions()
 
-        # Main game loop
-        t = 0
-        running = True
-        while running:
-            t += dt
-            still_flying = False
-            for lander in lander_list:
-                if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
-                    still_flying = True
-                    lander.Update(dt, landing_target)
-
-            # End of this generation
-            if not still_flying or t > time_before_skip:
-                running = False
-                lander_list.sort(key=Lander.DetermineCost)
-                print(f"{lander_list[0].DetermineCost():0.01f}")
-                lander_list = lander_list[:int(landers_per_gen/4)]
+        for k in range(10):
+            # Main game loop
+            t = 0
+            running = True
+            while running:
+                t += dt
+                still_flying = False
                 for lander in lander_list:
-                    lander.SetInitialConditions()
+                    if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
+                        still_flying = True
+                        lander.Update(dt, landing_target)
+
+                # End of this generation
+                if not still_flying or t > time_before_skip:
+                    running = False
+                    for lander in lander_list:
+                        lander.total_cost += lander.parameters['cost']
+
+        lander_list.sort(key=Lander.DetermineTotalCost)
+        print(f"{lander_list[0].DetermineTotalCost():0.01f}")
+        old_lander_list = lander_list
+        
 
     NeuralNetwork.SaveNeuralNetwork(lander_list[0].neural_network.parameters)
 
