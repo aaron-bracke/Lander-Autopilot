@@ -6,25 +6,19 @@ from random import shuffle, getrandbits, randrange
 
 class NeuralNetwork:
     """Create an instance of the neural network"""
-    def __init__(self, read_trained, parent1=None, parent2=None):
-
-        if read_trained:
-            self.parameters = NeuralNetwork.ReadNeuralNetwork()
-        elif parent1 is not None and parent2 is not None:
-            self.parameters = NeuralNetwork.CombineGenes(parent1, parent2)
-        else:
-            self.parameters = NeuralNetwork.GenerateRandomNetwork()
+    def __init__(self):
+        self.parameters = NeuralNetwork.GenerateRandomNetwork()
 
     def Predict(self, a0):
         """Predict the result of a single sample and set the layer values"""
         z1 = np.matmul(self.parameters[0], a0) + self.parameters[3]
-        a1 = self.HypTan(z1)    # First hidden layer
+        a1 = self.Sigmoid(z1)    # First hidden layer
 
         z2 = np.matmul(self.parameters[1], a1) + self.parameters[4]
-        a2 = self.HypTan(z2)  # Second hidden layer
+        a2 = self.Sigmoid(z2)  # Second hidden layer
 
         z3 = np.matmul(self.parameters[2], a2) + self.parameters[5]
-        a3 = self.Gaussian(z3)  # Second hidden layer
+        a3 = self.Sigmoid(z3)  # Output layer
 
         return np.around(a3.flatten())
 
@@ -41,7 +35,7 @@ class NeuralNetwork:
 
     @staticmethod
     def GenerateRandomNetwork():
-        layer_sizes        = [9, 8, 8, 4]
+        layer_sizes        = [9, 16, 16, 4]
         weight_shapes      = [(a, b) for a, b in zip(layer_sizes[1:], layer_sizes[:-1])]
 
         weights            = np.array([np.random.standard_normal(weight_shape)/(weight_shape[1]**.5) for weight_shape in weight_shapes], dtype=object)

@@ -6,33 +6,33 @@ import numpy as np
 from NeuralNetwork import NeuralNetwork
 
 class Lander:
-    def __init__(self, player_controlled, read_only=False, parent1=None, parent2=None):
-        # self.player_controlled = player_controlled
-        # if self.player_controlled:
-        #     self.Update = self.PlayerUpdate
-        # else:
-        #     self.Update = self.AIUpdate
-        #     self.neural_network = NeuralNetwork(read_only, parent1, parent2)
-
-        self.Update = self.AutopilotUpdate
-        # self.Update = self.PlayerUpdate
-
+    def __init__(self, control_mode, display_simulation, display_stats=False):
+        
+        self.control_mode = control_mode
+        self.display_simulation = display_simulation
+        self.display_stats = display_stats
         self.SetInitialConditions()
-        self.total_cost = 1.0
+
+        if self.control_mode == "player":
+            self.Update = self.PlayerUpdate
+        elif self.control_mode == "neural_net":
+            self.Update = self.NNUpdate
+            self.neural_network = NeuralNetwork()
+        elif self.control_mode == "autopilot":
+            self.Update = self.AutopilotUpdate
 
     def SetInitialConditions(self):
         self.parameters = {
             "thrust_level": 0.0,
-            "pitch_angle": random.uniform(-10.0, 10.0), #0, #
-            "x": random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0), #width_screen_pixels/2, #
+            "pitch_angle": random.randint(-10.0, 10.0),
+            "x": random.uniform(width_screen_pixels/2 - 150.0, width_screen_pixels/2 + 150.0),
             "altitude": 0.0,
-            "y": random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0), #height_screen_pixels + 100.0, #
-            "vx": random.uniform(-10.0, 10.0), #0, #
-            "vy": random.uniform(-60.0, -20.0), #-30.0, #
+            "y": random.uniform(height_screen_pixels+50.0, height_screen_pixels+150.0),
+            "vx": random.uniform(-10.0, 10.0),
+            "vy": random.uniform(-60.0, -20.0),
             "mass": total_mass,
             "fuel": total_fuel,
             "condition": "flying",
-            "cost": 5000.0
             }
         self.parameters['altitude'] = (self.parameters['y'] - ground_height - 32) / 10.0
 
@@ -84,8 +84,8 @@ class Lander:
             self.parameters['y'] = ground_height + 32
             self.parameters['altitude'] = 0.0
 
-    def AIUpdate(self, dt, landing_target):
-        """Retrieve AI input and update physics"""
+    def NNUpdate(self, dt, landing_target):
+        """Retrieve NN output and update physics"""
         # Retrieve input from neural network
         AI_input = self.neural_network.Predict(np.array([[self.parameters['thrust_level']/100], [sin(radians(self.parameters['pitch_angle']))], \
             [cos(radians(self.parameters['pitch_angle']))], [self.parameters['x']/width_screen_pixels], [self.parameters['y']/height_screen_pixels], [self.parameters['vx']/20.0], \
@@ -127,10 +127,6 @@ class Lander:
 
         # When the lander touches the ground
         if self.parameters['altitude'] <= 0.0:
-            self.parameters['cost'] = abs(self.parameters['x'] - landing_target) + sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) + \
-                                      abs(self.parameters['pitch_angle']) + ((total_fuel) - self.parameters['fuel'])
-                                      
-
             if abs(self.parameters['pitch_angle']) < 10.0 and sqrt(self.parameters['vx']**2 + self.parameters['vy']**2) < 20.0:
                 self.parameters['condition'] = "has_landed"
             else:
@@ -153,25 +149,29 @@ class Lander:
         self.parameters['mass'] = total_mass - total_fuel + self.parameters['fuel']
 
 
-        # Determine input based on current parameters
+        # Determine the condition (phase) the lander is in
         autopilot_input = np.zeros(4)
 
-        target_alt = 50.0
-        if abs(self.parameters['x'] - landing_target) < 5.0 and abs(self.parameters['altitude'] - target_alt) < 30.0:
+        target_alt = 20.0
+        kx = 50.0 # 60.0    # Spring behavious in horizontal direction
+        ky = 110.0  # 110.0 # Spring behavious in vertical direction
+
+        if abs(self.parameters['x'] - landing_target) < 8.0 and abs(self.parameters['altitude'] - target_alt) < 30.0:
             self.parameters['condition'] = "initiated_landing"
 
+        # During the final landing phase
         if self.parameters['condition'] == "initiated_landing":
             target_alt = -5.0
+            kx = 20.0 # 60.0    # Spring behavious in horizontal direction
+            ky = 225.0  # 110.0 # Spring behavious in vertical direction
 
         # Determine target values for pitch angle and thrust level
-        kx = 60.0 # 60.0
         cx = 2 * sqrt(kx * self.parameters['mass'])
         if thrust_multiplier * self.parameters['thrust_level'] != 0.0:
             target_pitch = (kx*(self.parameters['x'] - landing_target) + cx*self.parameters['vx']) / (thrust_multiplier * self.parameters['thrust_level'])
         else:
-            target_pitch = 0.0
+            target_pitch = sin(radians(self.parameters['pitch_angle']))
 
-        ky = 110.0  # 110.0
         cy = 2 * sqrt(ky * self.parameters['mass'])
         if thrust_multiplier != 0.0:
             target_thrust_level = (self.parameters['mass'] * gravity - cy * self.parameters['vy'] - ky * (self.parameters['altitude'] - target_alt))\
@@ -180,9 +180,9 @@ class Lander:
             target_thrust_level = 0.0
 
         # Determine input from target values
-        if self.parameters['thrust_level'] < target_thrust_level:
+        if self.parameters['thrust_level'] < target_thrust_level*1.1:
             autopilot_input[0] = 1
-        elif self.parameters['thrust_level'] > target_thrust_level:
+        elif self.parameters['thrust_level'] > target_thrust_level*0.9:
             autopilot_input[1] = 1
 
         if sin(radians(self.parameters['pitch_angle'])) < target_pitch:
@@ -230,13 +230,13 @@ class Lander:
         font = pg.font.SysFont("consolas", 20, True)
         text_colour = (237, 125, 58)
 
-        text1 = f"Thrust setting: {self.parameters['thrust_level'] if self.parameters['fuel'] != 0.0 else 0:0.01f}%"
+        text1 = f"Thrust setting: {self.parameters['thrust_level'] if self.parameters['fuel'] != 0.0 else 0:1.0f}%"
         text1_img = font.render(text1, True, text_colour)
         text1_rect = text1_img.get_rect()
         text1_rect.left = 10
         text1_rect.top = 10
 
-        text2 = f"Pitch angle: {self.parameters['pitch_angle']:0.01f}" + u"\N{DEGREE SIGN}"
+        text2 = f"Pitch angle: {self.parameters['pitch_angle']:1.0f}" + u"\N{DEGREE SIGN}"
         text2_img = font.render(text2, True, text_colour)
         text2_rect = text2_img.get_rect()
         text2_rect.left = 10
@@ -373,7 +373,7 @@ def TrainController(landers_per_gen=250, num_of_gens=1000, time_before_skip=25.0
 
     NeuralNetwork.SaveNeuralNetwork(lander_list[0].neural_network.parameters)
 
-def PlayGame(display_ai=False, display_player=True):
+def RunSimulation(lander_list):
     # Start PyGame
     pg.init()
     reso = (int(width_screen_pixels), int(height_screen_pixels))
@@ -391,10 +391,6 @@ def PlayGame(display_ai=False, display_player=True):
     running = True
 
     landing_target = CreateLandingTarget()
-    if display_player:
-        player_lander = Lander(True)
-    if display_ai:
-        ai_lander = Lander(False, True)
 
     while running:
         pg.event.pump()
@@ -406,17 +402,16 @@ def PlayGame(display_ai=False, display_player=True):
         DrawGround(screen)
         DrawTarget(screen, landing_target)
 
-        if display_ai:
-            if not (ai_lander.parameters['condition'] == "has_landed" or ai_lander.parameters['condition'] == "has_crashed"):
-                ai_lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
-            ai_lander.DrawLander(screen, sprite_list)
-
-        if display_player:
-            if not (player_lander.parameters['condition'] == "has_landed" or player_lander.parameters['condition'] == "has_crashed"):
-                # player_lander.Update(pg.time.get_ticks()/1000 - last_time, keys)
-                player_lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
-            player_lander.DrawLander(screen, sprite_list)
-            player_lander.DrawText(screen, landing_target)
+        for lander in lander_list:
+            if lander.display_simulation:
+                if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
+                    if lander.control_mode == "neural_net" or lander.control_mode == "autopilot":
+                        lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
+                    elif lander.control_mode == "player":
+                        lander.Update(pg.time.get_ticks()/1000 - last_time, keys)
+                lander.DrawLander(screen, sprite_list)
+                if lander.display_stats:
+                    lander.DrawText(screen, landing_target)
 
         last_time = pg.time.get_ticks()/1000
         pg.display.update()                           # Update the screen
@@ -441,6 +436,5 @@ background_colour = (57, 70, 72)
 ground_colour = (211, 212, 217)
 target_colour = (199, 62, 29)
 
-for i in range(3):
-    PlayGame(False, True)
-# TrainController()
+for i in range(10):
+    RunSimulation([Lander("autopilot", True), Lander("neural_net", True, True)])
