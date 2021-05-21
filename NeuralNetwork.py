@@ -8,8 +8,8 @@ class NeuralNetwork:
     """Create an instance of the neural network"""
     def __init__(self):
         self.parameters = NeuralNetwork.ReadNeuralNetwork()
-        self.layers = np.array([np.zeros(layer_size) for layer_size in [9, 16, 16, 4]], dtype=object)
-        self.zlayers = np.array([np.zeros(layer_size) for layer_size in [9, 16, 16, 4]], dtype=object)
+        self.layers = np.array([np.zeros(layer_size) for layer_size in [9, 16, 16, 2]], dtype=object)
+        self.zlayers = np.array([np.zeros(layer_size) for layer_size in [9, 16, 16, 2]], dtype=object)
 
     def Predict(self, a0):
         """Predict the result of a single sample and set the layer values"""
@@ -20,22 +20,21 @@ class NeuralNetwork:
         a2 = self.Sigmoid(z2)  # Second hidden layer
 
         z3 = np.matmul(self.parameters[2], a2) + self.parameters[5]
-        a3 = self.Sigmoid(z3)  # Output layer
-
+        a3 = self.HypTan(z3)  # Output layer
+        
         self.zlayers = np.array([a0, z1, z2, z3], dtype=object) # Save the results in arrays
         self.layers = np.array([a0, a1, a2, a3], dtype=object)
 
-        return np.around(a3.flatten())
+        return np.copy(a3.flatten())
     
     def DetermineGradient(self, y):
         """Determine the gradient vector dC to the corresponding label y"""
 
-        print(f"{np.linalg.norm((self.layers[3] - y)**2):0.01f}")
+        # print(f"{np.linalg.norm((self.layers[3] - y)**2):0.01f}")
 
-        common_factor3 = 2 * (self.layers[3] - y) * NeuralNetwork.dSigmoid(self.zlayers[3])
+        common_factor3 = 2 * (self.layers[3] - y) * NeuralNetwork.dHypTan(self.zlayers[3])
         common_factor2 = NeuralNetwork.dSigmoid(self.zlayers[2]) * np.dot(np.matmul(self.parameters[2], np.ones((len(self.layers[2]),1))).T, common_factor3)
         common_factor1 = NeuralNetwork.dSigmoid(self.zlayers[1]) * np.dot(np.matmul(self.parameters[1], np.ones((len(self.layers[1]),1))).T, common_factor2)
-
         
         dW1 = np.matmul(common_factor1, self.layers[0].T)
         dW2 = np.matmul(common_factor2, self.layers[1].T)
@@ -60,7 +59,7 @@ class NeuralNetwork:
 
     @staticmethod
     def GenerateRandomNetwork():
-        layer_sizes        = [9, 16, 16, 4]
+        layer_sizes        = [9, 120, 120, 2]
         weight_shapes      = [(a, b) for a, b in zip(layer_sizes[1:], layer_sizes[:-1])]
 
         weights            = np.array([np.random.standard_normal(weight_shape)/(weight_shape[1]**.5) for weight_shape in weight_shapes], dtype=object)
@@ -83,6 +82,11 @@ class NeuralNetwork:
     def HypTan(x):
         """Hyperbolic tangent activation function"""
         return (np.exp(x) - np.exp(-x))/(np.exp(x) + np.exp(-x))
+    
+    @staticmethod
+    def dHypTan(x):
+        """Derivative of hyperbolic tangent activation function"""
+        return 4 / (np.exp(x) + np.exp(-x))**2
 
     @staticmethod
     def Gaussian(x):
@@ -122,5 +126,5 @@ class NeuralNetwork:
         NeuralNetwork.SaveNeuralNetwork(self.parameters)
 
 # network = NeuralNetwork()
+# network.ResetNetwork()
 # print(network.Predict(np.array([[5], [5], [5], [5], [5], [5], [5], [5], [5]])))
-# network.DetermineGradient(np.array([[1, 0, 0, 1]]).T)
