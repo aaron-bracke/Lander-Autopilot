@@ -7,7 +7,9 @@ from random import shuffle, getrandbits, randrange
 class NeuralNetwork:
     """Create an instance of the neural network"""
     def __init__(self):
-        self.parameters = NeuralNetwork.GenerateRandomNetwork()
+        self.parameters = NeuralNetwork.ReadNeuralNetwork()
+        self.layers = np.array([np.zeros(layer_size) for layer_size in [9, 16, 16, 4]], dtype=object)
+        self.zlayers = np.array([np.zeros(layer_size) for layer_size in [9, 16, 16, 4]], dtype=object)
 
     def Predict(self, a0):
         """Predict the result of a single sample and set the layer values"""
@@ -20,7 +22,30 @@ class NeuralNetwork:
         z3 = np.matmul(self.parameters[2], a2) + self.parameters[5]
         a3 = self.Sigmoid(z3)  # Output layer
 
+        self.zlayers = np.array([a0, z1, z2, z3], dtype=object) # Save the results in arrays
+        self.layers = np.array([a0, a1, a2, a3], dtype=object)
+
         return np.around(a3.flatten())
+    
+    def DetermineGradient(self, y):
+        """Determine the gradient vector dC to the corresponding label y"""
+
+        print(f"{np.linalg.norm((self.layers[3] - y)**2):0.01f}")
+
+        common_factor3 = 2 * (self.layers[3] - y) * NeuralNetwork.dSigmoid(self.zlayers[3])
+        common_factor2 = NeuralNetwork.dSigmoid(self.zlayers[2]) * np.dot(np.matmul(self.parameters[2], np.ones((len(self.layers[2]),1))).T, common_factor3)
+        common_factor1 = NeuralNetwork.dSigmoid(self.zlayers[1]) * np.dot(np.matmul(self.parameters[1], np.ones((len(self.layers[1]),1))).T, common_factor2)
+
+        
+        dW1 = np.matmul(common_factor1, self.layers[0].T)
+        dW2 = np.matmul(common_factor2, self.layers[1].T)
+        dW3 = np.matmul(common_factor3, self.layers[2].T)
+
+        db1 = common_factor1
+        db2 = common_factor2
+        db3 = common_factor3
+        
+        return copy.deepcopy(np.array([dW1, dW2, dW3, db1, db2, db3], dtype=object))
 
     @staticmethod
     def SaveNeuralNetwork(parameters):
@@ -48,6 +73,11 @@ class NeuralNetwork:
     def Sigmoid(x):
         """Sigmoid activation function"""
         return 1/(1 + np.exp(-x))
+
+    @staticmethod
+    def dSigmoid(x):
+        """Derivative of Sigmoid activation function"""
+        return NeuralNetwork.Sigmoid(x) * (1 - NeuralNetwork.Sigmoid(x))
 
     @staticmethod
     def HypTan(x):
@@ -91,6 +121,6 @@ class NeuralNetwork:
         self.parameters = NeuralNetwork.GenerateRandomNetwork()
         NeuralNetwork.SaveNeuralNetwork(self.parameters)
 
-# network = NeuralNetwork(True)
-# network.ResetNetwork()
-# print(network.Predict([[5], [5], [5], [5], [5], [5], [5], [5], [5]]))
+# network = NeuralNetwork()
+# print(network.Predict(np.array([[5], [5], [5], [5], [5], [5], [5], [5], [5]])))
+# network.DetermineGradient(np.array([[1, 0, 0, 1]]).T)

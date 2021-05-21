@@ -8,6 +8,8 @@ from NeuralNetwork import NeuralNetwork
 class Lander:
     def __init__(self, control_mode, display_simulation, display_stats=False):
         
+        random.seed(1)
+
         self.control_mode = control_mode
         self.display_simulation = display_simulation
         self.display_stats = display_stats
@@ -150,7 +152,7 @@ class Lander:
 
 
         # Determine the condition (phase) the lander is in
-        autopilot_input = np.zeros(4)
+        autopilot_input = np.zeros((4, 1))
 
         target_alt = 20.0
         kx = 50.0 # 60.0    # Spring behavious in horizontal direction
@@ -224,6 +226,8 @@ class Lander:
             self.parameters['vy'] = 0
             self.parameters['y'] = ground_height + 32
             self.parameters['altitude'] = 0.0
+
+        return autopilot_input
 
     def DrawText(self, display_surface, landing_target):
         """Show information on screen"""
@@ -405,8 +409,11 @@ def RunSimulation(lander_list):
         for lander in lander_list:
             if lander.display_simulation:
                 if not (lander.parameters['condition'] == "has_landed" or lander.parameters['condition'] == "has_crashed"):
-                    if lander.control_mode == "neural_net" or lander.control_mode == "autopilot":
+                    if lander.control_mode == "autopilot":
+                        autopilot_input = lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
+                    elif lander.control_mode == "neural_net":
                         lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
+                        lander.neural_network.parameters += 0.01 * lander.neural_network.DetermineGradient(autopilot_input)
                     elif lander.control_mode == "player":
                         lander.Update(pg.time.get_ticks()/1000 - last_time, keys)
                 lander.DrawLander(screen, sprite_list)
@@ -418,6 +425,8 @@ def RunSimulation(lander_list):
         time.sleep(0.02)
 
     pg.quit()
+
+    NeuralNetwork.SaveNeuralNetwork(lander_list[-1].neural_network.parameters)
 
 # Constants
 width_screen_pixels = 1080
