@@ -120,15 +120,6 @@ class Lander:
             autopilot_target_sin_pitch = (kx*(self.parameters['x'] - landing_target) + cx*self.parameters['vx']) / (thrust_multiplier * self.parameters['thrust_level'])
         else:
             autopilot_target_sin_pitch = sin(radians(self.parameters['pitch_angle']))
-        
-        try:
-            autopilot_target_pitch = degrees(asin(autopilot_target_sin_pitch))
-        except ValueError:
-            if autopilot_target_sin_pitch > 1:
-                autopilot_target_pitch = 180.0
-            elif autopilot_target_sin_pitch < -1:
-                autopilot_target_pitch = -180.0
-
 
         cy = 2 * sqrt(ky * self.parameters['mass'])
         if thrust_multiplier != 0.0:
@@ -137,13 +128,10 @@ class Lander:
         else:
             autopilot_target_thrust_level = 0.0
 
-        # Train the neural network from comparison to what autopilot would do
-        self.neural_network.parameters -= 0.0001 * self.neural_network.DetermineGradient(np.array([[autopilot_target_thrust_level/100.0, autopilot_target_pitch/180.0]]).T)
-
         # Create default neural network input
         NN_input = np.zeros((4, 1))
 
-        print(f"Thrust level: {NN_target_values[0]*100.0:0.01f} \t Pitch angle: {NN_target_values[1]*180.0:0.01f}")
+        print(f"Thrust level: {NN_target_values[0]:0.01f} \t Pitch angle: {NN_target_values[1]:0.01f}")
         
         # Determine input from target values
         if self.parameters['thrust_level'] < NN_target_values[0]*1.1*100.0:
@@ -151,9 +139,9 @@ class Lander:
         elif self.parameters['thrust_level'] > NN_target_values[0]*0.9*100.0:
             NN_input[1] = 1
 
-        if self.parameters['pitch_angle'] < NN_target_values[1]*180.0:
+        if sin(radians(self.parameters['pitch_angle'])) < NN_target_values[1]:
             NN_input[2] = 1
-        elif self.parameters['pitch_angle'] > NN_target_values[1]*180.0:
+        elif sin(radians(self.parameters['pitch_angle'])) > NN_target_values[1]:
             NN_input[3] = 1
 
         # Input
@@ -190,6 +178,8 @@ class Lander:
             self.parameters['vy'] = 0
             self.parameters['y'] = ground_height + 32
             self.parameters['altitude'] = 0.0
+        
+        return 0.001 * self.neural_network.DetermineGradient(np.array([[autopilot_target_thrust_level/100.0, autopilot_target_sin_pitch]]).T)
 
     def AutopilotUpdate(self, dt, landing_target):
         """Retrieve autopilot input and update physics"""
@@ -447,7 +437,10 @@ def RunSimulation(lander_list):
 
     landing_target = CreateLandingTarget()
 
+    i = 0
+    total_dc = np.zeros_like(lander_list[-1].neural_network.parameters)
     while running:
+        i += 1
         pg.event.pump()
         keys = pg.key.get_pressed()
         if keys[pg.K_ESCAPE]:                       # QUIT the game
@@ -463,7 +456,7 @@ def RunSimulation(lander_list):
                     if lander.control_mode == "autopilot":
                         lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
                     elif lander.control_mode == "neural_net":
-                        lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
+                        total_dc += lander.Update(pg.time.get_ticks()/1000 - last_time, landing_target)
                     elif lander.control_mode == "player":
                         lander.Update(pg.time.get_ticks()/1000 - last_time, keys)
                 lander.DrawLander(screen, sprite_list)
@@ -475,6 +468,8 @@ def RunSimulation(lander_list):
         time.sleep(0.02)
 
     pg.quit()
+
+    lander_list[-1].neural_network.parameters -= total_dc / i
 
     NeuralNetwork.SaveNeuralNetwork(lander_list[-1].neural_network.parameters)
 
